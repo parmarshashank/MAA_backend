@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt';
 import { AuthRequest } from '../middleware/authMiddleware';
 
 const prisma = new PrismaClient();
@@ -11,7 +10,7 @@ interface RegisterRequestBody {
     name: string;
     email: string;
     password: string;
-    role?: 'USER' | 'ADMIN';
+    hospitalId: string;
 }
 
 interface LoginRequestBody {
@@ -20,74 +19,97 @@ interface LoginRequestBody {
 }
 
 export const register = async (
-    req: Request<{}, any, RegisterRequestBody>,
+    req: Request<{ role: string }, any, RegisterRequestBody>,
     res: Response
 ): Promise<void> => {
-    const { name, email, password, role = 'USER' } = req.body;
-
     try {
-        const existingUser = await prisma.user.findUnique({
-            where: { email }
-        });
+        const { name, email, password, hospitalId } = req.body;
+        const { role } = req.params;
 
-        if (existingUser) {
-            res.status(400).json({ message: 'User already exists' });
+        if (!['doctor', 'pharmacist'].includes(role.toLowerCase())) {
+            res.status(400).json({ message: 'Invalid role specified' });
             return;
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = await prisma.user.create({
-            data: {
-                name,
-                email,
-                password: hashedPassword,
-                role
-            }
-        });
+        
+        let user;
+        if (role.toLowerCase() === 'doctor') {
+            user = await prisma.doctor.create({
+                data: {
+                    name,
+                    email,
+                    password: hashedPassword,
+                    hospitalId
+                }
+            });
+        } else {
+            user = await prisma.pharmacist.create({
+                data: {
+                    name,
+                    email,
+                    password: hashedPassword,
+                    hospitalId
+                }
+            });
+        }
 
         const token = jwt.sign(
-            { userId: user.id, email: user.email, role: user.role },
-            JWT_SECRET,
-            { expiresIn: JWT_EXPIRES_IN }
+            { userId: user.id, role: role.toUpperCase() },
+            process.env.JWT_SECRET!,
+            { expiresIn: '24h' }
         );
 
-        res.status(201).json({ token });
-    } catch (error) {
+        res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role } });
+    } catch (error: any) {
+        if (error.code === 'P2002') {
+            res.status(400).json({ message: 'Email already exists' });
+            return;
+        }
         res.status(500).json({ message: 'Error creating user' });
     }
 };
 
 export const login = async (
-    req: Request<{}, any, LoginRequestBody>,
+    req: Request<{ role: string }, any, LoginRequestBody>,
     res: Response
 ): Promise<void> => {
-    const { email, password } = req.body;
-
     try {
-        const user = await prisma.user.findUnique({
-            where: { email }
-        });
+        const { email, password } = req.body;
+        const { role } = req.params;
+
+        if (!['doctor', 'pharmacist'].includes(role.toLowerCase())) {
+            res.status(400).json({ message: 'Invalid role specified' });
+            return;
+        }
+
+        let user;
+        if (role.toLowerCase() === 'doctor') {
+            user = await prisma.doctor.findUnique({ where: { email } });
+        } else {
+            user = await prisma.pharmacist.findUnique({ where: { email } });
+        }
 
         if (!user) {
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
 
-        const isValidPassword = await bcrypt.compare(password, user.password);
-        if (!isValidPassword) {
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword) {
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
 
         const token = jwt.sign(
-            { userId: user.id, email: user.email, role: user.role },
-            JWT_SECRET,
-            { expiresIn: JWT_EXPIRES_IN }
+            { userId: user.id, role: role.toUpperCase() },
+            process.env.JWT_SECRET!,
+            { expiresIn: '24h' }
         );
 
-        res.json({ token });
+        res.json({ token, user: { id: user.id, name: user.name, email: user.email, role } });
     } catch (error) {
-        res.status(500).json({ message: 'Error logging in' });
+        res.status(500).json({ message: 'Error during login' });
     }
 };
 
@@ -96,22 +118,39 @@ export const getMe = async (
     res: Response
 ): Promise<void> => {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: req.user?.userId },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true
-            }
-        });
+        const { userId, role } = req.user!;
+        
+        let user;
+        if (role === 'DOCTOR') {
+            user = await prisma.doctor.findUnique({
+                where: { id: userId },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    hospital: true,
+                    createdAt: true
+                }
+            });
+        } else {
+            user = await prisma.pharmacist.findUnique({
+                where: { id: userId },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    hospital: true,
+                    createdAt: true
+                }
+            });
+        }
 
         if (!user) {
             res.status(404).json({ message: 'User not found' });
             return;
         }
 
-        res.json(user);
+        res.json({ ...user, role });
     } catch (error) {
         res.status(500).json({ message: 'Error fetching user data' });
     }

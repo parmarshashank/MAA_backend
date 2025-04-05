@@ -5,6 +5,8 @@ import authRoutes from './routes/auth';
 import medicineRoutes from './routes/medicines';
 import prescriptionRoutes from './routes/prescriptions';
 import hospitalRoutes from './routes/hospitals';
+import patientRoutes from './routes/patients';
+import caretakerRoutes from './routes/caretakers';
 
 dotenv.config();
 
@@ -18,6 +20,8 @@ app.use('/auth', authRoutes);
 app.use('/medicines', medicineRoutes);
 app.use('/prescriptions', prescriptionRoutes);
 app.use('/hospitals', hospitalRoutes);
+app.use('/patients', patientRoutes);
+app.use('/caretakers', caretakerRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
