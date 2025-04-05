@@ -2,11 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
+import adminRoutes from './routes/admin';
 import medicineRoutes from './routes/medicines';
 import prescriptionRoutes from './routes/prescriptions';
 import hospitalRoutes from './routes/hospitals';
 import patientRoutes from './routes/patients';
 import caretakerRoutes from './routes/caretakers';
+
 
 dotenv.config();
 
@@ -17,6 +19,7 @@ app.use(express.json());
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/admin', adminRoutes);
 app.use('/medicines', medicineRoutes);
 app.use('/prescriptions', prescriptionRoutes);
 app.use('/hospitals', hospitalRoutes);

@@ -9,9 +9,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Admin {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  password     String
+  hospitals    Hospital[]
+  createdAt    DateTime     @default(now())
+}
+
 model Hospital {
   id           String       @id @default(uuid())
   name         String
+  adminId      String
+  admin        Admin        @relation(fields: [adminId], references: [id])
   doctors      Doctor[]
   pharmacists  Pharmacist[]
   createdAt    DateTime     @default(now())

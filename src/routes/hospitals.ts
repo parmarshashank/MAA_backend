@@ -17,13 +17,13 @@ router.get('/', getAllHospitals);
 // Get Hospital Details (Public)
 router.get('/:id', getHospitalById);
 
-// Create Hospital (Admin only)
-router.post('/', authenticate, requireUserType(['ADMIN']), createHospital);
+// Create Hospital (Admin or Doctor)
+router.post('/', authenticate, requireUserType(['ADMIN', 'DOCTOR']), createHospital);
 
-// Update Hospital (Admin only)
-router.put('/:id', authenticate, requireUserType(['ADMIN']), updateHospital);
+// Update Hospital (Admin or Doctor)
+router.put('/:id', authenticate, requireUserType(['ADMIN', 'DOCTOR']), updateHospital);
 
-// Delete Hospital (Admin only)
-router.delete('/:id', authenticate, requireUserType(['ADMIN']), deleteHospital);
+// Delete Hospital (Admin or Doctor)
+router.delete('/:id', authenticate, requireUserType(['ADMIN', 'DOCTOR']), deleteHospital);
 
 export default router; 
