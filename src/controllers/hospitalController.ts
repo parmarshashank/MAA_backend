@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { AuthRequest } from '../middleware/authMiddleware';
 
 const prisma = new PrismaClient();
 
@@ -11,6 +12,13 @@ export const getAllHospitals = async (_req: Request, res: Response): Promise<voi
     try {
         const hospitals = await prisma.hospital.findMany({
             include: {
+                admin: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true
+                    }
+                },
                 _count: {
                     select: {
                         doctors: true,
@@ -33,6 +41,13 @@ export const getHospitalById = async (req: Request, res: Response): Promise<void
         const hospital = await prisma.hospital.findUnique({
             where: { id },
             include: {
+                admin: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true
+                    }
+                },
                 doctors: {
                     select: {
                         id: true,
@@ -61,26 +76,52 @@ export const getHospitalById = async (req: Request, res: Response): Promise<void
     }
 };
 
-export const createHospital = async (req: Request, res: Response): Promise<void> => {
+export const createHospital = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { name } = req.body as CreateHospitalBody;
+        const { userId } = req.user!;  // Get admin ID from authenticated user
         
         const hospital = await prisma.hospital.create({
             data: {
-                name
+                name,
+                adminId: userId
+            },
+            include: {
+                admin: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true
+                    }
+                }
             }
         });
         
         res.status(201).json(hospital);
     } catch (error) {
+        console.error('Error creating hospital:', error);
         res.status(500).json({ message: 'Error creating hospital' });
     }
 };
 
-export const updateHospital = async (req: Request, res: Response): Promise<void> => {
+export const updateHospital = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const { name } = req.body as CreateHospitalBody;
+        const { userId } = req.user!;  // Get admin ID from authenticated user
+        
+        // Verify the hospital belongs to this admin
+        const existingHospital = await prisma.hospital.findFirst({
+            where: {
+                id,
+                adminId: userId
+            }
+        });
+
+        if (!existingHospital) {
+            res.status(404).json({ message: 'Hospital not found or access denied' });
+            return;
+        }
         
         const hospital = await prisma.hospital.update({
             where: { id },
@@ -88,6 +129,13 @@ export const updateHospital = async (req: Request, res: Response): Promise<void>
                 name
             },
             include: {
+                admin: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true
+                    }
+                },
                 doctors: {
                     select: {
                         id: true,
@@ -115,9 +163,23 @@ export const updateHospital = async (req: Request, res: Response): Promise<void>
     }
 };
 
-export const deleteHospital = async (req: Request, res: Response): Promise<void> => {
+export const deleteHospital = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const { userId } = req.user!;  // Get admin ID from authenticated user
+        
+        // Verify the hospital belongs to this admin
+        const existingHospital = await prisma.hospital.findFirst({
+            where: {
+                id,
+                adminId: userId
+            }
+        });
+
+        if (!existingHospital) {
+            res.status(404).json({ message: 'Hospital not found or access denied' });
+            return;
+        }
         
         await prisma.hospital.delete({
             where: { id }
