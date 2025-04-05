@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './authMiddleware';
 
-type UserType = 'DOCTOR' | 'PHARMACIST';
+type UserType = 'DOCTOR' | 'PHARMACIST' | 'ADMIN';
 
 export const requireUserType = (allowedTypes: UserType[]) => {
     return async (req: AuthRequest, res: Response, next: NextFunction) => {

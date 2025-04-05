@@ -18,6 +18,8 @@ interface LoginRequestBody {
     password: string;
 }
 
+type UserType = 'DOCTOR' | 'PHARMACIST';
+
 export const register = async (
     req: Request<{ role: string }, any, RegisterRequestBody>,
     res: Response
@@ -25,6 +27,7 @@ export const register = async (
     try {
         const { name, email, password, hospitalId } = req.body;
         const { role } = req.params;
+        const userType = role.toUpperCase() as UserType;
 
         if (!['doctor', 'pharmacist'].includes(role.toLowerCase())) {
             res.status(400).json({ message: 'Invalid role specified' });
@@ -34,7 +37,7 @@ export const register = async (
         const hashedPassword = await bcrypt.hash(password, 10);
         
         let user;
-        if (role.toLowerCase() === 'doctor') {
+        if (userType === 'DOCTOR') {
             user = await prisma.doctor.create({
                 data: {
                     name,
@@ -55,12 +58,21 @@ export const register = async (
         }
 
         const token = jwt.sign(
-            { userId: user.id, role: role.toUpperCase() },
+            { userId: user.id, userType, hospitalId },
             process.env.JWT_SECRET!,
             { expiresIn: '24h' }
         );
 
-        res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role } });
+        res.status(201).json({ 
+            token, 
+            user: { 
+                id: user.id, 
+                name: user.name, 
+                email: user.email, 
+                userType,
+                hospitalId 
+            } 
+        });
     } catch (error: any) {
         if (error.code === 'P2002') {
             res.status(400).json({ message: 'Email already exists' });
@@ -77,6 +89,7 @@ export const login = async (
     try {
         const { email, password } = req.body;
         const { role } = req.params;
+        const userType = role.toUpperCase() as UserType;
 
         if (!['doctor', 'pharmacist'].includes(role.toLowerCase())) {
             res.status(400).json({ message: 'Invalid role specified' });
@@ -84,7 +97,7 @@ export const login = async (
         }
 
         let user;
-        if (role.toLowerCase() === 'doctor') {
+        if (userType === 'DOCTOR') {
             user = await prisma.doctor.findUnique({ where: { email } });
         } else {
             user = await prisma.pharmacist.findUnique({ where: { email } });
@@ -102,12 +115,21 @@ export const login = async (
         }
 
         const token = jwt.sign(
-            { userId: user.id, role: role.toUpperCase() },
+            { userId: user.id, userType, hospitalId: user.hospitalId },
             process.env.JWT_SECRET!,
             { expiresIn: '24h' }
         );
 
-        res.json({ token, user: { id: user.id, name: user.name, email: user.email, role } });
+        res.json({ 
+            token, 
+            user: { 
+                id: user.id, 
+                name: user.name, 
+                email: user.email, 
+                userType,
+                hospitalId: user.hospitalId 
+            } 
+        });
     } catch (error) {
         res.status(500).json({ message: 'Error during login' });
     }
@@ -118,10 +140,10 @@ export const getMe = async (
     res: Response
 ): Promise<void> => {
     try {
-        const { userId, role } = req.user!;
+        const { userId, userType, hospitalId } = req.user!;
         
         let user;
-        if (role === 'DOCTOR') {
+        if (userType === 'DOCTOR') {
             user = await prisma.doctor.findUnique({
                 where: { id: userId },
                 select: {
@@ -150,7 +172,7 @@ export const getMe = async (
             return;
         }
 
-        res.json({ ...user, role });
+        res.json({ ...user, userType, hospitalId });
     } catch (error) {
         res.status(500).json({ message: 'Error fetching user data' });
     }
