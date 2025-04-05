@@ -1,0 +1,114 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Change if you're using MySQL or SQLite
+  url      = env("DATABASE_URL")
+}
+
+model Hospital {
+  id           String       @id @default(uuid())
+  name         String
+  doctors      Doctor[]
+  pharmacists  Pharmacist[]
+  createdAt    DateTime     @default(now())
+}
+
+model Pharmacist {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  password     String
+  hospitalId   String
+  hospital     Hospital     @relation(fields: [hospitalId], references: [id])
+  medicines    Medicine[]
+  createdAt    DateTime     @default(now())
+}
+
+model Doctor {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  password     String
+  hospitalId   String
+  hospital     Hospital     @relation(fields: [hospitalId], references: [id])
+  prescriptions Prescription[]
+  createdAt    DateTime     @default(now())
+}
+
+model Patient {
+  id            String       @id @default(uuid())
+  name          String
+  age           Int
+  dob           DateTime
+  gender        Gender
+  firebaseToken String
+  caretakerId   String? 
+  caretaker     Caretaker?   @relation(fields: [caretakerId], references: [id])
+  prescriptions Prescription[]
+  createdAt     DateTime     @default(now())
+}
+
+model Caretaker {
+  id           String      @id @default(uuid())
+  name         String
+  contact      String
+  patients     Patient[]
+}
+
+model Medicine {
+  id            String       @id @default(uuid())
+  name          String
+  description   String
+  pharmacistId  String
+  pharmacist    Pharmacist   @relation(fields: [pharmacistId], references: [id])
+  createdAt     DateTime     @default(now())
+}
+
+model Prescription {
+  id            String       @id @default(uuid())
+  patientId     String
+  patient       Patient      @relation(fields: [patientId], references: [id])
+  doctorId      String
+  doctor        Doctor       @relation(fields: [doctorId], references: [id])
+  items         PrescriptionItem[]
+  createdAt     DateTime     @default(now())
+}
+
+model PrescriptionItem {
+  id               String            @id @default(uuid())
+  prescriptionId   String
+  prescription     Prescription      @relation(fields: [prescriptionId], references: [id])
+  medicineId       String
+  medicine         Medicine          @relation(fields: [medicineId], references: [id])
+  dosage           String
+  frequency        String            // e.g., "Twice a day"
+  duration         Int               // in days
+  acknowledged     Boolean           @default(false)
+  schedule         MedicationSchedule[]
+}
+
+model MedicationSchedule {
+  id                  String            @id @default(uuid())
+  prescriptionItemId  String
+  prescriptionItem    PrescriptionItem  @relation(fields: [prescriptionItemId], references: [id])
+  scheduledAt         DateTime
+  status              ScheduleStatus    @default(PENDING)
+  acknowledgedAt      DateTime?
+}
+
+enum ScheduleStatus {
+  PENDING
+  TAKEN
+  MISSED
+  SKIPPED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
