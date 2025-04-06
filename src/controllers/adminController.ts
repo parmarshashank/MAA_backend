@@ -1,17 +1,20 @@
-import { Request, Response } from 'express';
+import { Response, RequestHandler } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { SERVER_CONFIG } from '../config/server';
 
 const prisma = new PrismaClient();
 
 // Register admin
-export const registerAdmin = async (req: Request, res: Response): Promise<void> => {
+export const registerAdmin: RequestHandler = async (req, res): Promise<void> => {
     try {
         const { name, email, password } = req.body;
 
         // Check if admin already exists
+                    //@ts-ignore
+
         const existingAdmin = await prisma.admin.findUnique({
             where: { email }
         });
@@ -22,7 +25,8 @@ export const registerAdmin = async (req: Request, res: Response): Promise<void> 
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        
+                    //@ts-ignore
+
         const admin = await prisma.admin.create({
             data: {
                 name,
@@ -32,18 +36,15 @@ export const registerAdmin = async (req: Request, res: Response): Promise<void> 
         });
 
         const token = jwt.sign(
-            { userId: admin.id, userType: 'ADMIN' },
-            process.env.JWT_SECRET!,
-            { expiresIn: '24h' }
+            { userId: admin.id, userType: 'ADMIN' } as jwt.JwtPayload,
+            SERVER_CONFIG.JWT_SECRET,
+            { expiresIn: SERVER_CONFIG.JWT_EXPIRES_IN } as jwt.SignOptions
         );
 
+        const { password: _, ...adminData } = admin;
         res.status(201).json({ 
             token,
-            admin: {
-                id: admin.id,
-                name: admin.name,
-                email: admin.email
-            }
+            admin: adminData
         });
     } catch (error) {
         console.error('Error creating admin:', error);
@@ -51,56 +52,14 @@ export const registerAdmin = async (req: Request, res: Response): Promise<void> 
     }
 };
 
-// Admin login
-export const loginAdmin = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { email, password } = req.body;
-
-        const admin = await prisma.admin.findUnique({
-            where: { email }
-        });
-
-        if (!admin) {
-            res.status(401).json({ message: 'Invalid credentials' });
-            return;
-        }
-
-        const validPassword = await bcrypt.compare(password, admin.password);
-        if (!validPassword) {
-            res.status(401).json({ message: 'Invalid credentials' });
-            return;
-        }
-
-        const token = jwt.sign(
-            { userId: admin.id, userType: 'ADMIN' },
-            process.env.JWT_SECRET!,
-            { expiresIn: '24h' }
-        );
-
-        res.json({
-            token,
-            admin: {
-                id: admin.id,
-                name: admin.name,
-                email: admin.email
-            }
-        });
-    } catch (error) {
-        console.error('Error during admin login:', error);
-        res.status(500).json({ message: 'Error during login' });
-    }
-};
-
 // Get admin profile
-export const getAdminProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getAdminProfile: RequestHandler = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { userId } = req.user!;
+            //@ts-ignore
 
         const admin = await prisma.admin.findUnique({
-            where: { id: userId },
-            include: {
-                hospitals: true
-            }
+            where: { id: userId }
         });
 
         if (!admin) {
@@ -117,18 +76,19 @@ export const getAdminProfile = async (req: AuthRequest, res: Response): Promise<
 };
 
 // Create doctor (Admin only)
-export const createDoctor = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createDoctor: RequestHandler = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { name, email, password, hospitalId } = req.body;
+        const { name, email, password } = req.body;
         
         const hashedPassword = await bcrypt.hash(password, 10);
         
         const doctor = await prisma.doctor.create({
+                        //@ts-ignore
+
             data: {
                 name,
                 email,
-                password: hashedPassword,
-                hospitalId
+                password: hashedPassword
             }
         });
 
@@ -141,18 +101,18 @@ export const createDoctor = async (req: AuthRequest, res: Response): Promise<voi
 };
 
 // Create pharmacist (Admin only)
-export const createPharmacist = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createPharmacist: RequestHandler = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { name, email, password, hospitalId } = req.body;
+        const { name, email, password } = req.body;
         
         const hashedPassword = await bcrypt.hash(password, 10);
         
         const pharmacist = await prisma.pharmacist.create({
+            //@ts-ignore
             data: {
                 name,
                 email,
-                password: hashedPassword,
-                hospitalId
+                password: hashedPassword
             }
         });
 

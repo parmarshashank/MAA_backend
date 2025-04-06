@@ -1,8 +1,9 @@
-import { Request, Response } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../middleware/authMiddleware';
+import { SERVER_CONFIG } from '../config/server';
 
 const prisma = new PrismaClient();
 
@@ -18,119 +19,217 @@ interface LoginRequestBody {
     password: string;
 }
 
-type UserType = 'DOCTOR' | 'PHARMACIST';
+type UserType = 'DOCTOR' | 'PHARMACIST' | 'ADMIN';
 
-export const register = async (
-    req: Request<{ role: string }, any, RegisterRequestBody>,
-    res: Response
-): Promise<void> => {
+// Admin Authentication
+export const registerAdmin: RequestHandler = async (req, res): Promise<void> => {
     try {
-        const { name, email, password, hospitalId } = req.body;
-        const { role } = req.params;
-        const userType = role.toUpperCase() as UserType;
+        const { name, email, password } = req.body;
 
-        if (!['doctor', 'pharmacist'].includes(role.toLowerCase())) {
-            res.status(400).json({ message: 'Invalid role specified' });
+        const existingAdmin = await prisma.admin.findUnique({
+            where: { email }
+        });
+
+        if (existingAdmin) {
+            res.status(400).json({ message: 'Admin with this email already exists' });
             return;
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        let user;
-        if (userType === 'DOCTOR') {
-            user = await prisma.doctor.create({
-                data: {
-                    name,
-                    email,
-                    password: hashedPassword,
-                    hospitalId
-                }
-            });
-        } else {
-            user = await prisma.pharmacist.create({
-                data: {
-                    name,
-                    email,
-                    password: hashedPassword,
-                    hospitalId
-                }
-            });
-        }
+        const admin = await prisma.admin.create({
+            data: {
+                name,
+                email,
+                password: hashedPassword
+            }
+        });
 
         const token = jwt.sign(
-            { userId: user.id, userType, hospitalId },
-            process.env.JWT_SECRET!,
-            { expiresIn: '24h' }
+            { userId: admin.id, userType: 'ADMIN' },
+            SERVER_CONFIG.JWT_SECRET,
+            { expiresIn: SERVER_CONFIG.JWT_EXPIRES_IN }
         );
 
-        res.status(201).json({ 
-            token, 
-            user: { 
-                id: user.id, 
-                name: user.name, 
-                email: user.email, 
-                userType,
-                hospitalId 
-            } 
-        });
-    } catch (error: any) {
-        if (error.code === 'P2002') {
-            res.status(400).json({ message: 'Email already exists' });
-            return;
-        }
-        res.status(500).json({ message: 'Error creating user' });
+        const { password: _, ...adminData } = admin;
+        res.status(201).json({ token, user: adminData });
+    } catch (error) {
+        console.error('Error in admin registration:', error);
+        res.status(500).json({ message: 'Error registering admin' });
     }
 };
 
-export const login = async (
-    req: Request<{ role: string }, any, LoginRequestBody>,
-    res: Response
-): Promise<void> => {
+export const loginAdmin: RequestHandler = async (req, res): Promise<void> => {
     try {
         const { email, password } = req.body;
-        const { role } = req.params;
-        const userType = role.toUpperCase() as UserType;
 
-        if (!['doctor', 'pharmacist'].includes(role.toLowerCase())) {
-            res.status(400).json({ message: 'Invalid role specified' });
-            return;
-        }
+        const admin = await prisma.admin.findUnique({
+            where: { email }
+        });
 
-        let user;
-        if (userType === 'DOCTOR') {
-            user = await prisma.doctor.findUnique({ where: { email } });
-        } else {
-            user = await prisma.pharmacist.findUnique({ where: { email } });
-        }
-
-        if (!user) {
+        if (!admin) {
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
 
-        const validPassword = await bcrypt.compare(password, user.password);
+        const validPassword = await bcrypt.compare(password, admin.password);
         if (!validPassword) {
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
 
         const token = jwt.sign(
-            { userId: user.id, userType, hospitalId: user.hospitalId },
-            process.env.JWT_SECRET!,
-            { expiresIn: '24h' }
+            { userId: admin.id, userType: 'ADMIN' },
+            SERVER_CONFIG.JWT_SECRET,
+            { expiresIn: SERVER_CONFIG.JWT_EXPIRES_IN }
         );
 
-        res.json({ 
-            token, 
-            user: { 
-                id: user.id, 
-                name: user.name, 
-                email: user.email, 
-                userType,
-                hospitalId: user.hospitalId 
-            } 
-        });
+        const { password: _, ...adminData } = admin;
+        res.json({ token, user: adminData });
     } catch (error) {
+        console.error('Error in admin login:', error);
+        res.status(500).json({ message: 'Error during login' });
+    }
+};
+
+// Doctor Authentication
+export const registerDoctor: RequestHandler = async (req, res): Promise<void> => {
+    try {
+        const { name, email, password } = req.body;
+
+        const existingDoctor = await prisma.doctor.findUnique({
+            where: { email }
+        });
+
+        if (existingDoctor) {
+            res.status(400).json({ message: 'Doctor with this email already exists' });
+            return;
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const doctor = await prisma.doctor.create({
+            data: {
+                name,
+                email,
+                password: hashedPassword
+            }
+        });
+
+        const token = jwt.sign(
+            { userId: doctor.id, userType: 'DOCTOR' },
+            SERVER_CONFIG.JWT_SECRET,
+            { expiresIn: SERVER_CONFIG.JWT_EXPIRES_IN }
+        );
+
+        const { password: _, ...doctorData } = doctor;
+        res.status(201).json({ token, user: doctorData });
+    } catch (error) {
+        console.error('Error in doctor registration:', error);
+        res.status(500).json({ message: 'Error registering doctor' });
+    }
+};
+
+export const loginDoctor: RequestHandler = async (req, res): Promise<void> => {
+    try {
+        const { email, password } = req.body;
+
+        const doctor = await prisma.doctor.findUnique({
+            where: { email }
+        });
+
+        if (!doctor) {
+            res.status(401).json({ message: 'Invalid credentials' });
+            return;
+        }
+
+        const validPassword = await bcrypt.compare(password, doctor.password);
+        if (!validPassword) {
+            res.status(401).json({ message: 'Invalid credentials' });
+            return;
+        }
+
+        const token = jwt.sign(
+            { userId: doctor.id, userType: 'DOCTOR' },
+            SERVER_CONFIG.JWT_SECRET,
+            { expiresIn: SERVER_CONFIG.JWT_EXPIRES_IN }
+        );
+
+        const { password: _, ...doctorData } = doctor;
+        res.json({ token, user: doctorData });
+    } catch (error) {
+        console.error('Error in doctor login:', error);
+        res.status(500).json({ message: 'Error during login' });
+    }
+};
+
+// Pharmacist Authentication
+export const registerPharmacist: RequestHandler = async (req, res): Promise<void> => {
+    try {
+        const { name, email, password } = req.body;
+
+        const existingPharmacist = await prisma.pharmacist.findUnique({
+            where: { email }
+        });
+
+        if (existingPharmacist) {
+            res.status(400).json({ message: 'Pharmacist with this email already exists' });
+            return;
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const pharmacist = await prisma.pharmacist.create({
+            data: {
+                name,
+                email,
+                password: hashedPassword
+            }
+        });
+
+        const token = jwt.sign(
+            { userId: pharmacist.id, userType: 'PHARMACIST' },
+            SERVER_CONFIG.JWT_SECRET,
+            { expiresIn: SERVER_CONFIG.JWT_EXPIRES_IN }
+        );
+
+        const { password: _, ...pharmacistData } = pharmacist;
+        res.status(201).json({ token, user: pharmacistData });
+    } catch (error) {
+        console.error('Error in pharmacist registration:', error);
+        res.status(500).json({ message: 'Error registering pharmacist' });
+    }
+};
+
+export const loginPharmacist: RequestHandler = async (req, res): Promise<void> => {
+    try {
+        const { email, password } = req.body;
+
+        const pharmacist = await prisma.pharmacist.findUnique({
+            where: { email }
+        });
+
+        if (!pharmacist) {
+            res.status(401).json({ message: 'Invalid credentials' });
+            return;
+        }
+
+        const validPassword = await bcrypt.compare(password, pharmacist.password);
+        if (!validPassword) {
+            res.status(401).json({ message: 'Invalid credentials' });
+            return;
+        }
+
+        const token = jwt.sign(
+            { userId: pharmacist.id, userType: 'PHARMACIST' },
+            SERVER_CONFIG.JWT_SECRET,
+            { expiresIn: SERVER_CONFIG.JWT_EXPIRES_IN }
+        );
+
+        const { password: _, ...pharmacistData } = pharmacist;
+        res.json({ token, user: pharmacistData });
+    } catch (error) {
+        console.error('Error in pharmacist login:', error);
         res.status(500).json({ message: 'Error during login' });
     }
 };

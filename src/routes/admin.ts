@@ -3,7 +3,6 @@ import { authenticate } from '../middleware/authMiddleware';
 import { requireUserType } from '../middleware/roleAuth';
 import {
     registerAdmin,
-    loginAdmin,
     getAdminProfile,
     createDoctor,
     createPharmacist
@@ -11,9 +10,8 @@ import {
 
 const router = Router();
 
-// Admin registration and login routes (public)
+// Public admin routes
 router.post('/register', registerAdmin);
-router.post('/login', loginAdmin);
 
 // Protected admin routes
 router.get('/me', authenticate, requireUserType(['ADMIN']), getAdminProfile);

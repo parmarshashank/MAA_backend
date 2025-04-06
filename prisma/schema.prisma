@@ -14,28 +14,6 @@ model Admin {
   name         String
   email        String       @unique
   password     String
-  hospitals    Hospital[]
-  createdAt    DateTime     @default(now())
-}
-
-model Hospital {
-  id           String       @id @default(uuid())
-  name         String
-  adminId      String
-  admin        Admin        @relation(fields: [adminId], references: [id])
-  doctors      Doctor[]
-  pharmacists  Pharmacist[]
-  createdAt    DateTime     @default(now())
-}
-
-model Pharmacist {
-  id           String       @id @default(uuid())
-  name         String
-  email        String       @unique
-  password     String
-  hospitalId   String
-  hospital     Hospital     @relation(fields: [hospitalId], references: [id])
-  medicines    Medicine[]
   createdAt    DateTime     @default(now())
 }
 
@@ -44,9 +22,28 @@ model Doctor {
   name         String
   email        String       @unique
   password     String
-  hospitalId   String
-  hospital     Hospital     @relation(fields: [hospitalId], references: [id])
+  hospitalId   String?
+  hospital     Hospital?    @relation(fields: [hospitalId], references: [id])
   prescriptions Prescription[]
+  createdAt    DateTime     @default(now())
+}
+
+model Pharmacist {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  password     String
+  hospitalId   String?
+  hospital     Hospital?    @relation(fields: [hospitalId], references: [id])
+  medicines    Medicine[]
+  createdAt    DateTime     @default(now())
+}
+
+model Hospital {
+  id           String       @id @default(uuid())
+  name         String
+  doctors      Doctor[]
+  pharmacists  Pharmacist[]
   createdAt    DateTime     @default(now())
 }
 
